@@ -245,6 +245,153 @@ async def policy_report_tool(params: PolicyReportParams) -> str:
     return json.dumps(result, default=str)
 
 
+# ── New SDK tools: explain, narrate, what-if ────────────────────────────
+
+
+class ExplainGapParams(BaseModel):
+    """Parameters for the explain_gap tool."""
+
+    control_id: str = Field(description="The control ID that failed (e.g. '8.3').")
+    requirement: str = Field(description="The control requirement text.")
+    gaps: str = Field(
+        description="JSON-encoded list of gap descriptions from the gap_analyzer.",
+    )
+    recommendations: str = Field(
+        default="[]",
+        description="JSON-encoded list of recommendations from the gap_analyzer.",
+    )
+    evidence_summary: str = Field(
+        default="",
+        description="Brief summary of the evidence that was collected for this control.",
+    )
+
+
+class NarrateEvidenceParams(BaseModel):
+    """Parameters for the narrate_evidence tool."""
+
+    control_id: str = Field(description="Control ID being narrated.")
+    requirement: str = Field(description="Control requirement text.")
+    evidence_items_json: str = Field(
+        description=(
+            "JSON-encoded list of evidence items for this control. "
+            "Each item has 'source', 'data_type', 'data', 'collected_at'."
+        ),
+    )
+    assessment_status: str = Field(
+        description="Assessment status: 'passed', 'gap', or 'not_assessed'.",
+    )
+
+
+class PolicySuiteEvalParams(BaseModel):
+    """Parameters for the policy_suite_eval tool."""
+
+    terraform_plan_json: str = Field(
+        description="JSON-encoded Terraform plan to evaluate.",
+    )
+    policies_dir: str = Field(
+        default="skills/policy-enforcement/rego-examples",
+        description="Directory containing .rego policy files.",
+    )
+
+
+@define_tool(description=(
+    "Explain WHY a compliance control failed and provide step-by-step "
+    "remediation guidance. Include specific Azure portal steps, CLI commands, "
+    "and estimated effort. Use this when a user asks 'why did this fail?' "
+    "or 'how do I fix this gap?'."
+))
+async def explain_gap_tool(params: ExplainGapParams) -> str:
+    """Return structured remediation guidance for a failed control."""
+    gaps = json.loads(params.gaps)
+    recommendations = json.loads(params.recommendations)
+
+    # Build a structured explanation that the LLM can enrich
+    explanation = {
+        "control_id": params.control_id,
+        "requirement": params.requirement,
+        "gaps_found": gaps,
+        "recommendations": recommendations,
+        "evidence_summary": params.evidence_summary,
+        "remediation_steps": [
+            f"Address gap: {g}" for g in gaps
+        ],
+    }
+    return json.dumps(explanation, default=str)
+
+
+@define_tool(description=(
+    "Generate auditor-facing prose narration for a compliance control. "
+    "Takes structured evidence and produces a professional narrative "
+    "paragraph suitable for audit reports. The narrative describes "
+    "what evidence was found, when it was collected, and whether the "
+    "control passes. Use this to produce human-readable report sections."
+))
+async def narrate_evidence_tool(params: NarrateEvidenceParams) -> str:
+    """Return a prose narration of the evidence for a control."""
+    items = json.loads(params.evidence_items_json)
+
+    narration_context = {
+        "control_id": params.control_id,
+        "requirement": params.requirement,
+        "status": params.assessment_status,
+        "evidence_count": len(items),
+        "sources": list({item.get("source", "unknown") for item in items}),
+        "data_types": list({item.get("data_type", "unknown") for item in items}),
+        "collection_dates": [
+            item.get("collected_at", "") for item in items if item.get("collected_at")
+        ],
+    }
+    return json.dumps(narration_context, default=str)
+
+
+@define_tool(description=(
+    "Evaluate ALL active Rego policies against a Terraform plan. "
+    "Scans the policies directory for .rego files, runs opa eval "
+    "for each policy, and returns a consolidated list of violations "
+    "grouped by policy. Use this for what-if simulation before "
+    "deploying infrastructure."
+))
+async def policy_suite_eval_tool(params: PolicySuiteEvalParams) -> str:
+    """Run all policies against a plan and return consolidated violations."""
+    from app.tools.opa_tester import opa_eval
+
+    plan = json.loads(params.terraform_plan_json)
+    policies_dir = Path(params.policies_dir)
+
+    results: list[dict[str, Any]] = []
+
+    if policies_dir.exists():
+        for rego_file in sorted(policies_dir.glob("*.rego")):
+            if rego_file.name.endswith("_test.rego"):
+                continue
+            policy_rego = rego_file.read_text(encoding="utf-8")
+            try:
+                eval_result = await opa_eval(
+                    policy_rego=policy_rego,
+                    terraform_plan_json=plan,
+                )
+                results.append({
+                    "policy_file": rego_file.name,
+                    "violations": eval_result.get("violations", []),
+                    "passed": eval_result.get("passed", True),
+                })
+            except Exception as exc:
+                results.append({
+                    "policy_file": rego_file.name,
+                    "error": str(exc),
+                    "passed": False,
+                })
+
+    total_violations = sum(len(r.get("violations", [])) for r in results)
+
+    return json.dumps({
+        "policies_evaluated": len(results),
+        "total_violations": total_violations,
+        "all_passed": total_violations == 0,
+        "results": results,
+    }, default=str)
+
+
 # ── Helper: collect all tools into a list ───────────────────────────────
 
 
@@ -265,4 +412,7 @@ def get_compliance_tools() -> list[Any]:
         opa_test_tool,
         compliance_report_tool,
         policy_report_tool,
+        explain_gap_tool,
+        narrate_evidence_tool,
+        policy_suite_eval_tool,
     ]

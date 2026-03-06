@@ -8,6 +8,7 @@ import {
 } from "@fluentui/react-components";
 import {
   ShieldCheckmarkRegular,
+  ChatRegular,
   DocumentSearchRegular,
   ShieldTaskRegular,
   ClipboardTextLtrRegular,
@@ -49,6 +50,7 @@ const useStyles = makeStyles({
 
 const tabs = [
   { value: "/", label: "Dashboard", icon: <ShieldCheckmarkRegular /> },
+  { value: "/chat", label: "Chat", icon: <ChatRegular /> },
   { value: "/evidence", label: "Evidence Collection", icon: <DocumentSearchRegular /> },
   { value: "/policy", label: "Policy Enforcer", icon: <ShieldTaskRegular /> },
   { value: "/reports", label: "Reports", icon: <ClipboardTextLtrRegular /> },

@@ -12,6 +12,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from app.agent.engine import get_agent_engine
 from app.agent.hooks import setup_telemetry
+from app.api.chat import router as chat_router
 from app.api.evidence import router as evidence_router
 from app.api.health import router as health_router
 from app.api.policy import router as policy_router
@@ -111,7 +112,7 @@ def create_app() -> FastAPI:
     # CORS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_allowed_origins,
+        allow_origins=settings.cors_origin_list,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -124,6 +125,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix="/api", tags=["health"])
     app.include_router(evidence_router, prefix="/api/evidence", tags=["evidence"])
     app.include_router(policy_router, prefix="/api/policy", tags=["policy"])
+    app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
 
     return app
 

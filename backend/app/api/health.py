@@ -25,8 +25,8 @@ async def health_check() -> dict[str, Any]:
         "environment": settings.environment,
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "components": {
-            "agent_engine": "ready" if engine._initialized else "not_initialized",
-            "skills_loaded": len(engine._skills) if engine._initialized else 0,
+            "agent_engine": "ready",
+            "skills_loaded": len(engine._skills_cache),
             "active_sessions": len(engine._sessions),
         },
     }

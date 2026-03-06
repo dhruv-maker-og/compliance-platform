@@ -205,6 +205,121 @@ def _parse_agent_response(response: str) -> dict[str, Any]:
     }
 
 
+# ── Chat session runner ────────────────────────────────────────────────────────
+
+_CHAT_SYSTEM_PROMPT = """\
+You are a **compliance assistant** for the ComplianceRewind & Policy Enforcer \
+platform. You help CISOs, auditors, GRC team members, and security engineers \
+with compliance questions in a conversational way.
+
+RULES:
+- Use the provided tools to answer questions with real data from Azure, \
+  GitHub, Entra ID, and Purview — do not guess.
+- Use explain_gap_tool when asked why a control failed.
+- Use narrate_evidence_tool to produce auditor-facing prose.
+- Use policy_suite_eval_tool for what-if simulations.
+- Use gap_analyzer_tool for deterministic pass/fail verdicts — NEVER \
+  make compliance judgments using your own reasoning.
+- Be concise but thorough. Use Markdown formatting.
+- NEVER expose raw secrets, tokens, or passwords.
+- If you are uncertain, say so and suggest next steps.
+
+You can help with:
+1. Explaining compliance gaps and remediation steps
+2. Generating OPA Rego policies from plain English
+3. What-if analysis of Terraform plans against all active policies
+4. Narrating evidence for auditor-ready reports
+5. General compliance and security questions
+"""
+
+
+async def run_chat_copilot_session(
+    user_message: str,
+    *,
+    history: list[dict[str, str]] | None = None,
+    model: str = "gpt-4.1",
+) -> AsyncIterator[dict[str, Any]]:
+    """Execute a multi-turn chat session and yield streaming events.
+
+    Unlike ``run_copilot_session`` (which destroys the session after one
+    prompt), this function supports conversational history.
+    """
+    manager = get_copilot_client_manager()
+
+    if not manager.is_running:
+        await manager.start()
+
+    tools = get_compliance_tools()
+    hooks = get_compliance_hooks()
+
+    # Build messages list with history
+    messages: list[dict[str, Any]] = []
+    if history:
+        for msg in history:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"],
+            })
+
+    session = await manager.create_session(
+        tools=tools,
+        system_message=_CHAT_SYSTEM_PROMPT,
+        model=model,
+        streaming=True,
+        hooks=hooks,
+    )
+
+    event_queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+    def _handle_event(event: Any) -> None:
+        event_type = getattr(event, "type", None)
+        if event_type is None:
+            return
+
+        event_type_str = event_type.value if hasattr(event_type, "value") else str(event_type)
+
+        if event_type_str == "assistant.message_delta":
+            delta = getattr(event.data, "delta_content", "") or ""
+            event_queue.put_nowait({"type": "delta", "content": delta})
+
+        elif event_type_str == "assistant.message":
+            content = getattr(event.data, "content", "") or ""
+            event_queue.put_nowait({"type": "message", "content": content})
+
+        elif event_type_str == "session.idle":
+            event_queue.put_nowait(None)
+
+        elif event_type_str.startswith("tool."):
+            tool_name = getattr(event.data, "name", "") or event_type_str
+            event_queue.put_nowait({
+                "type": "tool_call",
+                "content": tool_name,
+            })
+
+    session.on(_handle_event)
+
+    # Send conversation history + new message
+    if messages:
+        await session.send({"messages": messages, "prompt": user_message})
+    else:
+        await session.send({"prompt": user_message})
+
+    logger.info("chat_session_send", message_length=len(user_message))
+
+    while True:
+        try:
+            item = await asyncio.wait_for(event_queue.get(), timeout=300.0)
+        except asyncio.TimeoutError:
+            break
+
+        if item is None:
+            break
+
+        yield item
+
+    await session.destroy()
+
+
 async def run_copilot_streaming(
     prompt: str,
     *,

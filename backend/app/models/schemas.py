@@ -38,6 +38,7 @@ class Severity(str, Enum):
 class AgentMode(str, Enum):
     COMPLIANCE = "compliance"
     POLICY = "policy"
+    CHAT = "chat"
 
 
 # ── Evidence Collection ─────────────────────────────────────────────────────
@@ -207,3 +208,48 @@ class HealthResponse(BaseModel):
     copilot_cli_available: bool = False
     mcp_servers_configured: int = 0
     skills_loaded: list[str] = Field(default_factory=list)
+
+
+# ── Chat ────────────────────────────────────────────────────────────────────
+
+class ChatRole(str, Enum):
+    USER = "user"
+    ASSISTANT = "assistant"
+    SYSTEM = "system"
+    TOOL = "tool"
+
+
+class ChatMessage(BaseModel):
+    """A single chat message."""
+    role: ChatRole
+    content: str
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    tool_name: Optional[str] = None
+    tool_result: Optional[dict[str, Any]] = None
+
+
+class ChatSendRequest(BaseModel):
+    """Request to send a chat message."""
+    message: str = Field(description="User message text")
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Existing chat session ID. Omit to start a new conversation.",
+    )
+
+
+class ChatSessionResponse(BaseModel):
+    """Response after sending a chat message."""
+    session_id: str
+    stream_url: str
+
+
+class ExplainGapRequest(BaseModel):
+    """Request to explain a specific compliance gap."""
+    control_id: str = Field(description="Control ID to explain (e.g. '8.3')")
+    assessment_json: str = Field(description="JSON-encoded ControlAssessment")
+    evidence_json: str = Field(default="{}", description="JSON-encoded evidence bundle for this control")
+
+
+class WhatIfRequest(BaseModel):
+    """Request for what-if policy simulation."""
+    terraform_plan_json: str = Field(description="Terraform plan JSON content")

@@ -38,7 +38,8 @@ class CopilotClientManager:
             return
 
         try:
-            from copilot import CopilotClient  # type: ignore[import-untyped]
+            from copilot import CopilotClient, PermissionHandler  # type: ignore[import-untyped]
+            self._permission_handler = PermissionHandler.approve_all
         except ImportError:
             logger.error(
                 "copilot_sdk_not_installed",
@@ -130,6 +131,10 @@ class CopilotClientManager:
 
         if hooks:
             session_config["hooks"] = hooks
+
+        # Permission handler is required by the SDK
+        if hasattr(self, "_permission_handler"):
+            session_config["on_permission_request"] = self._permission_handler
 
         # Connect to MCP servers configured in mcp.json
         mcp_config_path = self._settings.mcp_config_path

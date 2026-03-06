@@ -702,6 +702,77 @@ Return a JSON object with keys: policy_content, test_content, policy_path, test_
 Return a JSON object with keys: fixes_applied, pr_url, summary
 """
 
+    # ── Chat Session Support ───────────────────────────────────────────────
+
+    def create_chat_session(self) -> AgentSession:
+        """Create a new conversational chat session."""
+        session = self.create_session(
+            mode=AgentMode.CHAT,
+            metadata={"history": [], "pending_messages": []},
+        )
+        logger.info("chat_session_created", session_id=session.session_id)
+        return session
+
+    async def run_chat_turn(
+        self,
+        session_id: str,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Run one conversational turn: take the pending message, send to
+        the Copilot SDK, and yield streaming events.
+
+        Yields dicts with ``{"type": str, "content": str}``.
+        """
+        session = self._sessions.get(session_id)
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+
+        pending = session.metadata.get("pending_messages", [])
+        if not pending:
+            yield {"type": "message", "content": "No message to process."}
+            return
+
+        user_message = pending.pop(0)
+
+        # Record in history
+        history: list[dict] = session.metadata.setdefault("history", [])
+        history.append({"role": "user", "content": user_message})
+
+        session.status = SessionStatus.RUNNING
+        session.updated_at = datetime.utcnow()
+
+        try:
+            from app.copilot.session import run_chat_copilot_session
+
+            collected_chunks: list[str] = []
+            async for event in run_chat_copilot_session(
+                user_message=user_message,
+                history=history[:-1],  # exclude the message we just appended
+                model=self._settings.copilot_model,
+            ):
+                if event.get("type") == "delta":
+                    collected_chunks.append(event.get("content", ""))
+                yield event
+
+            assistant_reply = "".join(collected_chunks)
+            if assistant_reply:
+                history.append({"role": "assistant", "content": assistant_reply})
+
+        except (ImportError, RuntimeError) as exc:
+            logger.warning("chat_copilot_fallback", reason=str(exc))
+            fallback_msg = (
+                "I'm your compliance assistant. I can help you with:\n"
+                "- **Evidence collection**: Ask me about your compliance posture\n"
+                "- **Gap explanations**: Ask me why a control failed\n"
+                "- **Policy generation**: Describe a policy in plain English\n"
+                "- **What-if analysis**: Paste a Terraform plan to check compliance\n\n"
+                f"(Running in fallback mode — {exc})"
+            )
+            history.append({"role": "assistant", "content": fallback_msg})
+            yield {"type": "delta", "content": fallback_msg}
+
+        session.status = SessionStatus.COMPLETED
+        session.updated_at = datetime.utcnow()
+
     async def _execute_agent(
         self,
         prompt: str,

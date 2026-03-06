@@ -1,11 +1,15 @@
 /** API client for the ComplianceRewind backend. */
 
 import type {
+  ChatSendRequest,
+  ChatSessionResponse,
   EvidenceCollectionRequest,
+  ExplainGapRequest,
   HealthResponse,
   PolicyEnforceRequest,
   PolicyGenerateRequest,
   SessionCreatedResponse,
+  WhatIfRequest,
 } from "../types";
 
 const API_BASE = "/api";
@@ -63,5 +67,27 @@ export const api = {
         `/policy/cancel/${sessionId}`,
         { method: "POST" }
       ),
+  },
+
+  chat: {
+    send: (req: ChatSendRequest) =>
+      request<ChatSessionResponse>("/chat/send", {
+        method: "POST",
+        body: JSON.stringify(req),
+      }),
+    history: (sessionId: string) =>
+      request<{ session_id: string; messages: Array<{ role: string; content: string }> }>(
+        `/chat/history/${sessionId}`
+      ),
+    explainGap: (req: ExplainGapRequest) =>
+      request<ChatSessionResponse>("/chat/explain-gap", {
+        method: "POST",
+        body: JSON.stringify(req),
+      }),
+    whatIf: (req: WhatIfRequest) =>
+      request<ChatSessionResponse>("/chat/what-if", {
+        method: "POST",
+        body: JSON.stringify(req),
+      }),
   },
 };

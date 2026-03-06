@@ -61,6 +61,35 @@ export interface HealthResponse {
   };
 }
 
+// Chat types
+
+export interface ChatMessage {
+  role: "user" | "assistant" | "system" | "tool";
+  content: string;
+  timestamp?: string;
+  tool_name?: string;
+}
+
+export interface ChatSendRequest {
+  message: string;
+  session_id?: string;
+}
+
+export interface ChatSessionResponse {
+  session_id: string;
+  stream_url: string;
+}
+
+export interface ExplainGapRequest {
+  control_id: string;
+  assessment_json: string;
+  evidence_json?: string;
+}
+
+export interface WhatIfRequest {
+  terraform_plan_json: string;
+}
+
 export interface ComplianceSummary {
   total_controls: number;
   passed: number;

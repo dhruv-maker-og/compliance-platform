@@ -1,5 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
+import Chat from "./pages/Chat";
 import Dashboard from "./pages/Dashboard";
 import EvidenceCollection from "./pages/EvidenceCollection";
 import PolicyEnforcer from "./pages/PolicyEnforcer";
@@ -10,6 +11,7 @@ function App() {
     <Routes>
       <Route path="/" element={<Layout />}>
         <Route index element={<Dashboard />} />
+        <Route path="chat" element={<Chat />} />
         <Route path="evidence" element={<EvidenceCollection />} />
         <Route path="policy" element={<PolicyEnforcer />} />
         <Route path="reports" element={<Reports />} />
