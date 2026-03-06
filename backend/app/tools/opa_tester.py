@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -17,6 +20,57 @@ from typing import Any
 import structlog
 
 logger = structlog.get_logger(__name__)
+
+
+def _resolve_opa_binary(opa_binary: str) -> str:
+    """Resolve OPA executable path from explicit value, env, PATH, or repo bin."""
+    if opa_binary and opa_binary != "opa":
+        return opa_binary
+
+    env_binary = os.getenv("OPA_BINARY", "").strip()
+    if env_binary:
+        return env_binary
+
+    path_binary = shutil.which("opa")
+    if path_binary:
+        return path_binary
+
+    repo_root = Path(__file__).resolve().parents[3]
+    candidates = [
+        repo_root / "tools" / "bin" / "opa.exe",
+        repo_root / "tools" / "bin" / "opa_windows_amd64.exe",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+
+    return opa_binary or "opa"
+
+
+async def _run_subprocess(
+    cmd: list[str],
+    *,
+    timeout: float,
+) -> tuple[int, bytes, bytes]:
+    """Run a subprocess with asyncio and a Windows-safe fallback."""
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        return process.returncode, stdout, stderr
+    except NotImplementedError:
+        # Windows selector event loop does not support subprocesses.
+        completed = await asyncio.to_thread(
+            subprocess.run,
+            cmd,
+            capture_output=True,
+            check=False,
+            timeout=timeout,
+        )
+        return completed.returncode, completed.stdout, completed.stderr
 
 
 async def opa_eval(
@@ -38,6 +92,7 @@ async def opa_eval(
         Dict with "violations" list, "passed" bool, and raw "output".
     """
     logger.info("opa_eval_start", query=query)
+    opa_binary = _resolve_opa_binary(opa_binary)
 
     # Normalize plan data
     if isinstance(terraform_plan_json, dict):
@@ -55,6 +110,7 @@ async def opa_eval(
         cmd = [
             opa_binary,
             "eval",
+            "--v0-compatible",
             "--data", str(policy_path),
             "--input", str(input_path),
             "--format", "json",
@@ -62,14 +118,7 @@ async def opa_eval(
         ]
 
         try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(), timeout=30.0
-            )
+            return_code, stdout, stderr = await _run_subprocess(cmd, timeout=30.0)
         except asyncio.TimeoutError:
             logger.error("opa_eval_timeout")
             return {
@@ -87,8 +136,10 @@ async def opa_eval(
                 "error": f"OPA binary not found: {opa_binary}",
             }
 
-        if process.returncode != 0:
-            err_str = stderr.decode("utf-8", errors="replace")
+        if return_code != 0:
+            err_str = stderr.decode("utf-8", errors="replace").strip()
+            if not err_str:
+                err_str = stdout.decode("utf-8", errors="replace").strip()
             logger.error("opa_eval_failed", stderr=err_str)
             return {
                 "violations": [],
@@ -140,20 +191,14 @@ async def opa_test(
         Dict with "test_results", "passed" and "summary".
     """
     logger.info("opa_test_start", policy_dir=policy_dir)
+    opa_binary = _resolve_opa_binary(opa_binary)
 
-    cmd = [opa_binary, "test", policy_dir, "--format", "json"]
+    cmd = [opa_binary, "test", "--v0-compatible", policy_dir, "--format", "json"]
     if verbose:
         cmd.append("-v")
 
     try:
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(
-            process.communicate(), timeout=60.0
-        )
+        return_code, stdout, stderr = await _run_subprocess(cmd, timeout=60.0)
     except asyncio.TimeoutError:
         logger.error("opa_test_timeout")
         return {
@@ -175,7 +220,7 @@ async def opa_test(
     except json.JSONDecodeError:
         return {
             "test_results": [],
-            "passed": process.returncode == 0,
+            "passed": return_code == 0,
             "summary": {"total": 0, "passed": 0, "failed": 0},
             "raw_output": stdout.decode("utf-8", errors="replace"),
             "error": None,
@@ -240,26 +285,20 @@ async def validate_rego_syntax(
         Dict with "valid" bool and optional "errors".
     """
     with tempfile.TemporaryDirectory(prefix="opa_check_") as tmpdir:
+        opa_binary = _resolve_opa_binary(opa_binary)
         policy_path = Path(tmpdir) / "policy.rego"
         policy_path.write_text(policy_rego, encoding="utf-8")
 
-        cmd = [opa_binary, "check", str(policy_path), "--format", "json"]
+        cmd = [opa_binary, "check", "--v0-compatible", str(policy_path), "--format", "json"]
 
         try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(), timeout=15.0
-            )
+            return_code, stdout, stderr = await _run_subprocess(cmd, timeout=15.0)
         except asyncio.TimeoutError:
             return {"valid": False, "errors": ["Syntax check timed out"]}
         except FileNotFoundError:
             return {"valid": False, "errors": [f"OPA binary not found: {opa_binary}"]}
 
-        if process.returncode == 0:
+        if return_code == 0:
             return {"valid": True, "errors": []}
 
         try:
@@ -271,6 +310,73 @@ async def validate_rego_syntax(
                 "valid": False,
                 "errors": [stderr.decode("utf-8", errors="replace")],
             }
+
+
+async def opa_eval_explain(
+    policy_rego: str,
+    terraform_plan_json: dict[str, Any] | str,
+    *,
+    query: str = "data.policy.deny",
+    opa_binary: str = "opa",
+    explain_level: str = "full",
+) -> dict[str, Any]:
+    """Evaluate a Rego policy and return OPA explain trace output.
+
+    Args:
+        policy_rego: The Rego policy source code.
+        terraform_plan_json: Terraform plan output (parsed JSON dict or raw string).
+        query: OPA query (default: data.policy.deny).
+        opa_binary: Path to the opa binary.
+        explain_level: Explain verbosity (full, notes, fails).
+
+    Returns:
+        Dict with explain trace output and optional error.
+    """
+    logger.info("opa_eval_explain_start", query=query, explain_level=explain_level)
+    opa_binary = _resolve_opa_binary(opa_binary)
+
+    if isinstance(terraform_plan_json, dict):
+        plan_str = json.dumps(terraform_plan_json)
+    else:
+        plan_str = terraform_plan_json
+
+    with tempfile.TemporaryDirectory(prefix="opa_explain_") as tmpdir:
+        policy_path = Path(tmpdir) / "policy.rego"
+        input_path = Path(tmpdir) / "input.json"
+
+        policy_path.write_text(policy_rego, encoding="utf-8")
+        input_path.write_text(plan_str, encoding="utf-8")
+
+        cmd = [
+            opa_binary,
+            "eval",
+            "--v0-compatible",
+            "--data", str(policy_path),
+            "--input", str(input_path),
+            "--explain", explain_level,
+            query,
+        ]
+
+        try:
+            return_code, stdout, stderr = await _run_subprocess(cmd, timeout=30.0)
+        except asyncio.TimeoutError:
+            return {"explain_trace": "", "error": "OPA explain timed out after 30 seconds"}
+        except FileNotFoundError:
+            return {"explain_trace": "", "error": f"OPA binary not found: {opa_binary}"}
+
+        if return_code != 0:
+            err_str = stderr.decode("utf-8", errors="replace").strip()
+            if not err_str:
+                err_str = stdout.decode("utf-8", errors="replace").strip()
+            return {
+                "explain_trace": "",
+                "error": err_str,
+            }
+
+    return {
+        "explain_trace": stdout.decode("utf-8", errors="replace"),
+        "error": None,
+    }
 
 
 def _extract_violations(opa_output: dict[str, Any]) -> list[dict[str, Any]]:

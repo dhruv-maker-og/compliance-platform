@@ -1,0 +1,54 @@
+{
+  "framework": "SOC2",
+  "version": "2017",
+  "controls": [
+    {
+      "id": "CC1.2",
+      "requirement": "The board demonstrates independence and oversight.",
+      "goal": "Control Environment",
+      "evidence_sources": ["github:docs_search"],
+      "pass_criteria": [
+        {"check": "doc_exists", "params": {"keywords": ["governance", "oversight", "security committee"]}}
+      ]
+    },
+    {
+      "id": "CC6.1",
+      "requirement": "The entity implements logical access security software and infrastructure.",
+      "goal": "Logical and Physical Access Controls",
+      "evidence_sources": ["entra-id:directory_roles", "entra-id:mfa_status"],
+      "pass_criteria": [
+        {"check": "rbac_enabled", "params": {}},
+        {"check": "mfa_enforced", "params": {"scope": "all_users"}}
+      ]
+    },
+    {
+      "id": "CC7.2",
+      "requirement": "Security events are monitored and acted upon.",
+      "goal": "System Operations",
+      "evidence_sources": ["azure:activity_log", "azure:defender_recommendations"],
+      "pass_criteria": [
+        {"check": "activity_log_enabled", "params": {}},
+        {"check": "vulnerability_scanning_enabled", "params": {}}
+      ]
+    },
+    {
+      "id": "CC8.1",
+      "requirement": "Changes to infrastructure and software are authorized and tested.",
+      "goal": "Change Management",
+      "evidence_sources": ["github:branch_protection", "github:pull_requests"],
+      "pass_criteria": [
+        {"check": "branch_protection_enabled", "params": {"branches": ["main", "master"]}},
+        {"check": "pr_review_required", "params": {"min_reviewers": 1}}
+      ]
+    },
+    {
+      "id": "A1.2",
+      "requirement": "Availability commitments are monitored and remediated.",
+      "goal": "Availability",
+      "evidence_sources": ["azure:resource_list", "azure:defender_recommendations"],
+      "pass_criteria": [
+        {"check": "doc_exists", "params": {"keywords": ["availability", "sla", "resilience"]}}
+      ]
+    }
+  ]
+}

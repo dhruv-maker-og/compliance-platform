@@ -8,6 +8,7 @@ import {
 } from "@fluentui/react-components";
 import {
   ShieldCheckmarkRegular,
+  SparkleRegular,
   ChatRegular,
   DocumentSearchRegular,
   ShieldTaskRegular,
@@ -54,6 +55,7 @@ const tabs = [
   { value: "/evidence", label: "Evidence Collection", icon: <DocumentSearchRegular /> },
   { value: "/policy", label: "Policy Enforcer", icon: <ShieldTaskRegular /> },
   { value: "/reports", label: "Reports", icon: <ClipboardTextLtrRegular /> },
+  { value: "/advanced", label: "Advanced", icon: <SparkleRegular /> },
 ];
 
 export default function Layout() {

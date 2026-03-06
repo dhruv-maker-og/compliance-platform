@@ -90,6 +90,81 @@ export interface WhatIfRequest {
   terraform_plan_json: string;
 }
 
+export interface NarrateEvidenceRequest {
+  control_id: string;
+  requirement: string;
+  assessment_status: ControlStatus;
+  evidence_items_json: string;
+}
+
+export interface DriftDetectionRequest {
+  baseline_assessments_json: string;
+  current_assessments_json: string;
+  scope?: string;
+}
+
+export interface DriftSnapshotRequest {
+  scope?: string;
+  assessments_json: string;
+}
+
+export interface DriftScheduleRequest {
+  scope?: string;
+  interval_seconds: number;
+}
+
+export interface DriftItem {
+  control_id: string;
+  baseline_status: string;
+  current_status: string;
+  change_type: "regression" | "improvement" | "changed";
+  details?: string;
+}
+
+export interface DriftDetectionResponse {
+  scope: string;
+  total_controls_compared: number;
+  drift_count: number;
+  regressions: number;
+  improvements: number;
+  changed_controls: DriftItem[];
+}
+
+export interface DriftScheduleStatus {
+  scope: string;
+  running: boolean;
+  interval_seconds?: number | null;
+  has_baseline: boolean;
+  has_current: boolean;
+  last_run_at?: string | null;
+  last_result?: DriftDetectionResponse | null;
+}
+
+export interface FrameworkComparisonRequest {
+  frameworks: string[];
+}
+
+export interface FrameworkComparisonResponse {
+  frameworks_requested: string[];
+  frameworks_found: string[];
+  total_controls_by_framework: Record<string, number>;
+  common_control_ids: string[];
+  unique_control_ids: Record<string, string[]>;
+}
+
+export interface RegoDebugRequest {
+  policy_rego: string;
+  terraform_plan_json: string;
+  query?: string;
+}
+
+export interface RegoDebugResponse {
+  passed: boolean;
+  violations: Array<Record<string, unknown>>;
+  explain_trace: string;
+  summary: string;
+}
+
 export interface ComplianceSummary {
   total_controls: number;
   passed: number;

@@ -3,11 +3,21 @@
 import type {
   ChatSendRequest,
   ChatSessionResponse,
+  DriftDetectionRequest,
+  DriftDetectionResponse,
+  DriftScheduleRequest,
+  DriftScheduleStatus,
+  DriftSnapshotRequest,
   EvidenceCollectionRequest,
   ExplainGapRequest,
+  FrameworkComparisonRequest,
+  FrameworkComparisonResponse,
   HealthResponse,
+  NarrateEvidenceRequest,
   PolicyEnforceRequest,
   PolicyGenerateRequest,
+  RegoDebugRequest,
+  RegoDebugResponse,
   SessionCreatedResponse,
   WhatIfRequest,
 } from "../types";
@@ -86,6 +96,63 @@ export const api = {
       }),
     whatIf: (req: WhatIfRequest) =>
       request<ChatSessionResponse>("/chat/what-if", {
+        method: "POST",
+        body: JSON.stringify(req),
+      }),
+  },
+
+  insights: {
+    narrateEvidence: (req: NarrateEvidenceRequest) =>
+      request<{ control_id: string; narrative: string; context: Record<string, unknown> }>(
+        "/insights/narrate-evidence",
+        {
+          method: "POST",
+          body: JSON.stringify(req),
+        }
+      ),
+    driftDetect: (req: DriftDetectionRequest) =>
+      request<DriftDetectionResponse>("/insights/drift-detect", {
+        method: "POST",
+        body: JSON.stringify(req),
+      }),
+    setDriftBaseline: (req: DriftSnapshotRequest) =>
+      request<{ scope: string; baseline_items: number; status: string }>(
+        "/insights/drift/baseline",
+        {
+          method: "POST",
+          body: JSON.stringify(req),
+        }
+      ),
+    setDriftCurrent: (req: DriftSnapshotRequest) =>
+      request<{ scope: string; current_items: number; status: string }>(
+        "/insights/drift/current",
+        {
+          method: "POST",
+          body: JSON.stringify(req),
+        }
+      ),
+    startDriftSchedule: (req: DriftScheduleRequest) =>
+      request<DriftScheduleStatus>("/insights/drift/schedule/start", {
+        method: "POST",
+        body: JSON.stringify(req),
+      }),
+    stopDriftSchedule: (scope: string) =>
+      request<DriftScheduleStatus>(`/insights/drift/schedule/stop/${scope}`, {
+        method: "POST",
+      }),
+    getDriftScheduleStatus: (scope: string) =>
+      request<DriftScheduleStatus>(`/insights/drift/schedule/status/${scope}`),
+    runDriftNow: (scope: string) =>
+      request<DriftDetectionResponse>(`/insights/drift/schedule/run-now/${scope}`, {
+        method: "POST",
+      }),
+    frameworkCompare: (req: FrameworkComparisonRequest) =>
+      request<FrameworkComparisonResponse>("/insights/framework-compare", {
+        method: "POST",
+        body: JSON.stringify(req),
+      }),
+    regoDebug: (req: RegoDebugRequest) =>
+      request<RegoDebugResponse>("/insights/rego-debug", {
         method: "POST",
         body: JSON.stringify(req),
       }),

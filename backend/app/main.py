@@ -15,6 +15,7 @@ from app.agent.hooks import setup_telemetry
 from app.api.chat import router as chat_router
 from app.api.evidence import router as evidence_router
 from app.api.health import router as health_router
+from app.api.insights import router as insights_router
 from app.api.policy import router as policy_router
 from app.config import get_settings, load_keyvault_secrets
 from app.copilot.client import get_copilot_client_manager
@@ -126,6 +127,7 @@ def create_app() -> FastAPI:
     app.include_router(evidence_router, prefix="/api/evidence", tags=["evidence"])
     app.include_router(policy_router, prefix="/api/policy", tags=["policy"])
     app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
+    app.include_router(insights_router, prefix="/api/insights", tags=["insights"])
 
     return app
 

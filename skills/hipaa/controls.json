@@ -1,0 +1,54 @@
+{
+  "framework": "HIPAA",
+  "version": "Security Rule",
+  "controls": [
+    {
+      "id": "164.308(a)(1)",
+      "requirement": "Risk analysis and risk management processes are implemented.",
+      "goal": "Administrative Safeguards",
+      "evidence_sources": ["github:docs_search", "azure:defender_recommendations"],
+      "pass_criteria": [
+        {"check": "doc_exists", "params": {"keywords": ["risk assessment", "risk management", "hipaa"]}}
+      ]
+    },
+    {
+      "id": "164.308(a)(5)",
+      "requirement": "Security awareness and training is implemented.",
+      "goal": "Administrative Safeguards",
+      "evidence_sources": ["github:docs_search"],
+      "pass_criteria": [
+        {"check": "doc_exists", "params": {"keywords": ["security awareness", "training"]}}
+      ]
+    },
+    {
+      "id": "164.312(a)(1)",
+      "requirement": "Access controls for ePHI systems are enforced.",
+      "goal": "Technical Safeguards",
+      "evidence_sources": ["entra-id:directory_roles", "entra-id:mfa_status"],
+      "pass_criteria": [
+        {"check": "rbac_enabled", "params": {}},
+        {"check": "mfa_enforced", "params": {"scope": "all_users"}}
+      ]
+    },
+    {
+      "id": "164.312(c)(1)",
+      "requirement": "Integrity controls protect ePHI from improper alteration.",
+      "goal": "Technical Safeguards",
+      "evidence_sources": ["azure:storage_accounts", "azure:sql_servers"],
+      "pass_criteria": [
+        {"check": "encryption_at_rest_enabled", "params": {}},
+        {"check": "tde_enabled", "params": {}}
+      ]
+    },
+    {
+      "id": "164.312(e)(1)",
+      "requirement": "Transmission security protects ePHI in transit.",
+      "goal": "Technical Safeguards",
+      "evidence_sources": ["azure:storage_accounts", "azure:sql_servers"],
+      "pass_criteria": [
+        {"check": "https_only", "params": {}},
+        {"check": "tls_enforced", "params": {"min_version": "1.2"}}
+      ]
+    }
+  ]
+}

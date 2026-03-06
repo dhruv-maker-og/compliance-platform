@@ -8,7 +8,6 @@ import {
   DialogContent,
   DialogSurface,
   DialogTitle,
-  DialogTrigger,
   Field,
   Text,
   Textarea,
@@ -20,8 +19,10 @@ import {
   ClipboardTextLtrRegular,
   LightbulbRegular,
   BeakerRegular,
+  DocumentTextRegular,
 } from "@fluentui/react-icons";
 import ChatPanel from "../components/ChatPanel";
+import { api } from "../api/client";
 
 const useStyles = makeStyles({
   page: {
@@ -61,6 +62,8 @@ export default function Reports() {
   const [chatMessage, setChatMessage] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [whatIfPlan, setWhatIfPlan] = useState("");
+  const [narrative, setNarrative] = useState("");
+  const [narrateBusy, setNarrateBusy] = useState(false);
 
   const handleExplainGap = (controlId: string, requirement: string) => {
     setChatMessage(
@@ -75,6 +78,31 @@ export default function Reports() {
       `Run a what-if policy simulation. Evaluate ALL active Rego policies against the following Terraform plan and summarise which resources comply and which violate policies. Group results by severity.\n\n\`\`\`json\n${whatIfPlan}\n\`\`\``
     );
     setChatOpen(true);
+  };
+
+  const handleNarrateEvidence = async () => {
+    setNarrateBusy(true);
+    try {
+      const result = await api.insights.narrateEvidence({
+        control_id: "1.2",
+        requirement: "Network security controls are configured and maintained",
+        assessment_status: "gap",
+        evidence_items_json: JSON.stringify([
+          {
+            source: "azure:nsg_rules",
+            data_type: "config",
+            data: { denied_ports: ["22"] },
+            collected_at: new Date().toISOString(),
+          },
+        ]),
+      });
+      setNarrative(result.narrative);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to generate narrative";
+      setNarrative(message);
+    } finally {
+      setNarrateBusy(false);
+    }
   };
 
   // Sample failed controls (in production these come from the latest report)
@@ -167,6 +195,43 @@ export default function Reports() {
               Run Simulation
             </Button>
           </div>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          image={<DocumentTextRegular fontSize={24} />}
+          header={<Text weight="semibold">Evidence Narration</Text>}
+          description={
+            <Text size={200}>
+              Generate auditor-ready prose from structured evidence for report sections
+            </Text>
+          }
+        />
+        <div className={styles.whatIfSection}>
+          <div className={styles.actions}>
+            <Button
+              appearance="primary"
+              icon={<DocumentTextRegular />}
+              onClick={handleNarrateEvidence}
+              disabled={narrateBusy}
+            >
+              {narrateBusy ? "Generating..." : "Generate Narrative"}
+            </Button>
+          </div>
+          {narrative && (
+            <div
+              style={{
+                whiteSpace: "pre-wrap",
+                padding: "10px",
+                border: `1px solid ${tokens.colorNeutralStroke1}`,
+                borderRadius: tokens.borderRadiusMedium,
+                background: tokens.colorNeutralBackground3,
+              }}
+            >
+              <Text>{narrative}</Text>
+            </div>
+          )}
         </div>
       </Card>
 

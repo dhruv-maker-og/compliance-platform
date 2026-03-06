@@ -17,6 +17,11 @@ from pydantic import BaseModel, Field
 
 logger = structlog.get_logger(__name__)
 
+
+def _repo_root() -> Path:
+    """Return repository root path based on this file location."""
+    return Path(__file__).resolve().parents[3]
+
 # ---------------------------------------------------------------------------
 # Lazy import of the decorator so the module can still be imported when the
 # SDK package is not installed (tests, linting, etc.).
@@ -294,6 +299,33 @@ class PolicySuiteEvalParams(BaseModel):
     )
 
 
+class DriftDetectionParams(BaseModel):
+    """Parameters for the drift_detection tool."""
+
+    baseline_assessments_json: str = Field(
+        description="JSON-encoded list of baseline control assessments.",
+    )
+    current_assessments_json: str = Field(
+        description="JSON-encoded list of current control assessments.",
+    )
+
+
+class FrameworkCompareParams(BaseModel):
+    """Parameters for the framework_compare tool."""
+
+    frameworks_json: str = Field(
+        description="JSON-encoded list of framework IDs (e.g. ['pci-dss', 'soc2']).",
+    )
+
+
+class RegoDebuggerParams(BaseModel):
+    """Parameters for the rego_debugger tool."""
+
+    policy_rego: str = Field(description="The Rego policy source code.")
+    terraform_plan_json: str = Field(description="JSON-encoded Terraform plan to evaluate.")
+    query: str = Field(default="data.policy.deny", description="OPA query expression.")
+
+
 @define_tool(description=(
     "Explain WHY a compliance control failed and provide step-by-step "
     "remediation guidance. Include specific Azure portal steps, CLI commands, "
@@ -357,6 +389,8 @@ async def policy_suite_eval_tool(params: PolicySuiteEvalParams) -> str:
 
     plan = json.loads(params.terraform_plan_json)
     policies_dir = Path(params.policies_dir)
+    if not policies_dir.is_absolute():
+        policies_dir = _repo_root() / policies_dir
 
     results: list[dict[str, Any]] = []
 
@@ -392,6 +426,127 @@ async def policy_suite_eval_tool(params: PolicySuiteEvalParams) -> str:
     }, default=str)
 
 
+@define_tool(description=(
+    "Detect drift by comparing baseline and current control assessments. "
+    "Returns regressions, improvements, and changed controls for continuous "
+    "compliance monitoring."
+))
+async def drift_detection_tool(params: DriftDetectionParams) -> str:
+    """Compare baseline vs current assessments and return drift summary."""
+    baseline = json.loads(params.baseline_assessments_json)
+    current = json.loads(params.current_assessments_json)
+
+    baseline_map = {item.get("control_id"): item for item in baseline}
+    current_map = {item.get("control_id"): item for item in current}
+    control_ids = sorted(set(baseline_map.keys()) | set(current_map.keys()))
+
+    changed_controls: list[dict[str, Any]] = []
+    regressions = 0
+    improvements = 0
+
+    for control_id in control_ids:
+        old_status = (baseline_map.get(control_id) or {}).get("status", "not_assessed")
+        new_status = (current_map.get(control_id) or {}).get("status", "not_assessed")
+
+        if old_status == new_status:
+            continue
+
+        if old_status == "passed" and new_status in {"failed", "gap"}:
+            change_type = "regression"
+            regressions += 1
+        elif old_status in {"failed", "gap", "not_assessed"} and new_status == "passed":
+            change_type = "improvement"
+            improvements += 1
+        else:
+            change_type = "changed"
+
+        changed_controls.append({
+            "control_id": control_id,
+            "baseline_status": old_status,
+            "current_status": new_status,
+            "change_type": change_type,
+        })
+
+    return json.dumps({
+        "total_controls_compared": len(control_ids),
+        "drift_count": len(changed_controls),
+        "regressions": regressions,
+        "improvements": improvements,
+        "changed_controls": changed_controls,
+    }, default=str)
+
+
+@define_tool(description=(
+    "Compare multiple compliance frameworks by loading controls.json from each "
+    "framework skill and identifying common/unique control IDs."
+))
+async def framework_compare_tool(params: FrameworkCompareParams) -> str:
+    """Compare controls across frameworks based on control IDs."""
+    frameworks = json.loads(params.frameworks_json)
+    base_path = _repo_root() / "skills"
+
+    found: dict[str, list[str]] = {}
+    not_found: list[str] = []
+
+    for framework in frameworks:
+        controls_path = base_path / framework / "controls.json"
+        if not controls_path.exists():
+            not_found.append(framework)
+            continue
+
+        controls_data = json.loads(controls_path.read_text(encoding="utf-8"))
+        ids = [str(c.get("id", "")) for c in controls_data.get("controls", []) if c.get("id")]
+        found[framework] = sorted(set(ids))
+
+    if found:
+        common_ids = sorted(set.intersection(*(set(ids) for ids in found.values())))
+    else:
+        common_ids = []
+
+    unique_control_ids: dict[str, list[str]] = {}
+    for framework, ids in found.items():
+        others = set().union(*(set(v) for k, v in found.items() if k != framework))
+        unique_control_ids[framework] = sorted([cid for cid in ids if cid not in others])
+
+    return json.dumps({
+        "frameworks_requested": frameworks,
+        "frameworks_found": sorted(found.keys()),
+        "frameworks_missing": sorted(not_found),
+        "total_controls_by_framework": {k: len(v) for k, v in found.items()},
+        "common_control_ids": common_ids,
+        "unique_control_ids": unique_control_ids,
+    }, default=str)
+
+
+@define_tool(description=(
+    "Run interactive Rego debugging using 'opa eval --explain full' and return "
+    "both violations and explain trace output for root-cause analysis."
+))
+async def rego_debugger_tool(params: RegoDebuggerParams) -> str:
+    """Return violations and explain trace for a Rego policy evaluation."""
+    from app.tools.opa_tester import opa_eval, opa_eval_explain
+
+    plan = json.loads(params.terraform_plan_json)
+    eval_result = await opa_eval(
+        policy_rego=params.policy_rego,
+        terraform_plan_json=plan,
+        query=params.query,
+    )
+    explain_result = await opa_eval_explain(
+        policy_rego=params.policy_rego,
+        terraform_plan_json=plan,
+        query=params.query,
+        explain_level="full",
+    )
+
+    return json.dumps({
+        "passed": eval_result.get("passed", False),
+        "violations": eval_result.get("violations", []),
+        "explain_trace": explain_result.get("explain_trace", ""),
+        "error": eval_result.get("error") or explain_result.get("error"),
+    }, default=str)
+
+
 # ── Helper: collect all tools into a list ───────────────────────────────
 
 
@@ -415,4 +570,7 @@ def get_compliance_tools() -> list[Any]:
         explain_gap_tool,
         narrate_evidence_tool,
         policy_suite_eval_tool,
+        drift_detection_tool,
+        framework_compare_tool,
+        rego_debugger_tool,
     ]

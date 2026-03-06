@@ -1,0 +1,1 @@
+{"resource_changes":[{"address":"azurerm_storage_account.bad","type":"azurerm_storage_account","change":{"after":{"enable_https_traffic_only":false}}}] }

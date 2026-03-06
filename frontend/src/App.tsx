@@ -1,5 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
+import AdvancedWorkflows from "./pages/AdvancedWorkflows";
 import Chat from "./pages/Chat";
 import Dashboard from "./pages/Dashboard";
 import EvidenceCollection from "./pages/EvidenceCollection";
@@ -15,6 +16,7 @@ function App() {
         <Route path="evidence" element={<EvidenceCollection />} />
         <Route path="policy" element={<PolicyEnforcer />} />
         <Route path="reports" element={<Reports />} />
+        <Route path="advanced" element={<AdvancedWorkflows />} />
       </Route>
     </Routes>
   );

@@ -1,0 +1,53 @@
+{
+  "framework": "ISO27001",
+  "version": "2022",
+  "controls": [
+    {
+      "id": "A.5.1",
+      "requirement": "Policies for information security are defined and reviewed.",
+      "goal": "Organizational Controls",
+      "evidence_sources": ["github:docs_search"],
+      "pass_criteria": [
+        {"check": "doc_exists", "params": {"keywords": ["information security policy", "iso 27001"]}},
+        {"check": "doc_reviewed_recently", "params": {"max_age_days": 365}}
+      ]
+    },
+    {
+      "id": "A.8.2",
+      "requirement": "Privileged access rights are controlled.",
+      "goal": "Technological Controls",
+      "evidence_sources": ["entra-id:directory_roles", "entra-id:privileged_roles"],
+      "pass_criteria": [
+        {"check": "privileged_roles_limited", "params": {"max_global_admins": 5}}
+      ]
+    },
+    {
+      "id": "A.8.24",
+      "requirement": "Use of cryptography is managed.",
+      "goal": "Technological Controls",
+      "evidence_sources": ["azure:keyvault_list", "azure:storage_accounts", "azure:sql_servers"],
+      "pass_criteria": [
+        {"check": "encryption_at_rest_enabled", "params": {}},
+        {"check": "tls_enforced", "params": {"min_version": "1.2"}}
+      ]
+    },
+    {
+      "id": "A.8.8",
+      "requirement": "Management of technical vulnerabilities is implemented.",
+      "goal": "Technological Controls",
+      "evidence_sources": ["azure:defender_recommendations"],
+      "pass_criteria": [
+        {"check": "vulnerability_scanning_enabled", "params": {}}
+      ]
+    },
+    {
+      "id": "A.5.23",
+      "requirement": "Information security for use of cloud services is managed.",
+      "goal": "Organizational Controls",
+      "evidence_sources": ["azure:resource_list", "github:docs_search"],
+      "pass_criteria": [
+        {"check": "doc_exists", "params": {"keywords": ["cloud security", "shared responsibility"]}}
+      ]
+    }
+  ]
+}

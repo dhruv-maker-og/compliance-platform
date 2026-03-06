@@ -253,3 +253,103 @@ class ExplainGapRequest(BaseModel):
 class WhatIfRequest(BaseModel):
     """Request for what-if policy simulation."""
     terraform_plan_json: str = Field(description="Terraform plan JSON content")
+
+
+class NarrateEvidenceRequest(BaseModel):
+    """Request for auditor-ready evidence narration."""
+    control_id: str = Field(description="Control ID being narrated")
+    requirement: str = Field(description="Control requirement text")
+    assessment_status: ControlStatus = Field(
+        default=ControlStatus.NOT_ASSESSED,
+        description="Assessment status for this control",
+    )
+    evidence_items_json: str = Field(
+        description="JSON-encoded list of evidence items for this control",
+    )
+
+
+class DriftDetectionRequest(BaseModel):
+    """Request to compare baseline and current compliance states."""
+    baseline_assessments_json: str = Field(
+        description="JSON-encoded list of baseline control assessments",
+    )
+    current_assessments_json: str = Field(
+        description="JSON-encoded list of current control assessments",
+    )
+    scope: str = Field(default="default", description="Environment or scope label")
+
+
+class DriftItem(BaseModel):
+    """Represents one changed control between baseline and current state."""
+    control_id: str
+    baseline_status: str
+    current_status: str
+    change_type: str = Field(description="regression | improvement | changed")
+    details: str = ""
+
+
+class DriftDetectionResponse(BaseModel):
+    """Response from drift detection."""
+    scope: str
+    total_controls_compared: int
+    drift_count: int
+    regressions: int
+    improvements: int
+    changed_controls: list[DriftItem] = Field(default_factory=list)
+
+
+class FrameworkComparisonRequest(BaseModel):
+    """Request to compare controls between multiple frameworks."""
+    frameworks: list[str] = Field(
+        default_factory=lambda: ["pci-dss"],
+        description="Framework IDs, e.g. ['pci-dss', 'soc2']",
+    )
+
+
+class FrameworkComparisonResponse(BaseModel):
+    """Summary of multi-framework control coverage."""
+    frameworks_requested: list[str] = Field(default_factory=list)
+    frameworks_found: list[str] = Field(default_factory=list)
+    total_controls_by_framework: dict[str, int] = Field(default_factory=dict)
+    common_control_ids: list[str] = Field(default_factory=list)
+    unique_control_ids: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class RegoDebugRequest(BaseModel):
+    """Request to debug Rego policy evaluation with trace output."""
+    policy_rego: str = Field(description="Rego policy source code")
+    terraform_plan_json: str = Field(description="Terraform plan JSON content")
+    query: str = Field(default="data.policy.deny", description="OPA query to evaluate")
+
+
+class RegoDebugResponse(BaseModel):
+    """Response for Rego debug runs."""
+    passed: bool
+    violations: list[dict[str, Any]] = Field(default_factory=list)
+    explain_trace: str = ""
+    summary: str = ""
+
+
+class DriftSnapshotRequest(BaseModel):
+    """Store a baseline or current snapshot for continuous drift checks."""
+    scope: str = Field(default="default", description="Environment or scope label")
+    assessments_json: str = Field(
+        description="JSON-encoded list of control assessments for this snapshot",
+    )
+
+
+class DriftScheduleRequest(BaseModel):
+    """Start a continuous drift schedule for a given scope."""
+    scope: str = Field(default="default", description="Environment or scope label")
+    interval_seconds: int = Field(default=60, ge=15, le=86400)
+
+
+class DriftScheduleStatus(BaseModel):
+    """Status of continuous drift scheduling for one scope."""
+    scope: str
+    running: bool
+    interval_seconds: int | None = None
+    has_baseline: bool = False
+    has_current: bool = False
+    last_run_at: datetime | None = None
+    last_result: DriftDetectionResponse | None = None
