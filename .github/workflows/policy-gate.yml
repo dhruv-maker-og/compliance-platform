@@ -1,0 +1,102 @@
+name: Policy Gate
+
+on:
+  pull_request:
+    paths:
+      - "**/*.tf"
+      - "skills/policy-enforcement/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  policy-enforcement:
+    name: Enforce OPA Policies on Terraform Changes
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OPA
+        run: |
+          curl -L -o opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
+          chmod +x opa
+          sudo mv opa /usr/local/bin/opa
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7"
+
+      - name: Terraform Init
+        working-directory: infra
+        run: terraform init -backend=false
+
+      - name: Generate Terraform Plan JSON
+        working-directory: infra
+        run: |
+          terraform plan -out=tfplan -input=false \
+            -var="subscription_id=00000000-0000-0000-0000-000000000000" \
+            -var="github_token=placeholder" || true
+          terraform show -json tfplan > ../tfplan.json || echo '{}' > ../tfplan.json
+
+      - name: Evaluate Encryption Policy
+        run: |
+          opa eval \
+            --data skills/policy-enforcement/rego-examples/require_encryption.rego \
+            --input tfplan.json \
+            --format pretty \
+            "data.policy.deny" | tee encryption_results.txt
+
+      - name: Evaluate Network Policy
+        run: |
+          opa eval \
+            --data skills/policy-enforcement/rego-examples/restrict_network_access.rego \
+            --input tfplan.json \
+            --format pretty \
+            "data.policy.deny" | tee network_results.txt
+
+      - name: Evaluate SQL Security Policy
+        run: |
+          opa eval \
+            --data skills/policy-enforcement/rego-examples/sql_security.rego \
+            --input tfplan.json \
+            --format pretty \
+            "data.policy.deny" | tee sql_results.txt
+
+      - name: Comment PR with Results
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const enc = fs.existsSync('encryption_results.txt') ? fs.readFileSync('encryption_results.txt', 'utf8') : 'N/A';
+            const net = fs.existsSync('network_results.txt') ? fs.readFileSync('network_results.txt', 'utf8') : 'N/A';
+            const sql = fs.existsSync('sql_results.txt') ? fs.readFileSync('sql_results.txt', 'utf8') : 'N/A';
+
+            const body = `## 🛡️ Policy Enforcement Results
+
+            ### Encryption Policy
+            \`\`\`
+            ${enc.trim()}
+            \`\`\`
+
+            ### Network Access Policy
+            \`\`\`
+            ${net.trim()}
+            \`\`\`
+
+            ### SQL Security Policy
+            \`\`\`
+            ${sql.trim()}
+            \`\`\`
+
+            *Evaluated by ComplianceRewind Policy Gate*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });

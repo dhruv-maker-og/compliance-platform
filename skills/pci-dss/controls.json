@@ -1,0 +1,259 @@
+{
+  "framework": "PCI-DSS",
+  "version": "4.0",
+  "controls": [
+    {
+      "id": "1.1",
+      "requirement": "Processes and mechanisms for network security controls are defined and understood",
+      "goal": "Build and Maintain a Secure Network and Systems",
+      "evidence_sources": ["github:docs_search", "azure:nsg_rules"],
+      "pass_criteria": [
+        {"check": "doc_exists", "params": {"keywords": ["network policy", "network security", "network diagram"]}},
+        {"check": "nsg_rules_exist", "params": {"min_count": 1}}
+      ]
+    },
+    {
+      "id": "1.2",
+      "requirement": "Network security controls are configured and maintained",
+      "goal": "Build and Maintain a Secure Network and Systems",
+      "evidence_sources": ["azure:nsg_rules", "azure:activity_log"],
+      "pass_criteria": [
+        {"check": "nsg_rules_exist", "params": {"min_count": 1}},
+        {"check": "no_overly_permissive_rules", "params": {"blocked_sources": ["0.0.0.0/0"], "sensitive_ports": [22, 3389, 1433, 3306]}}
+      ]
+    },
+    {
+      "id": "1.3",
+      "requirement": "Network access to and from the cardholder data environment is restricted",
+      "goal": "Build and Maintain a Secure Network and Systems",
+      "evidence_sources": ["azure:nsg_rules", "azure:resource_list"],
+      "pass_criteria": [
+        {"check": "cde_segmentation_exists", "params": {}},
+        {"check": "nsg_restricts_inbound", "params": {"target_tag": "cde"}}
+      ]
+    },
+    {
+      "id": "1.4",
+      "requirement": "Network connections between trusted and untrusted networks are controlled",
+      "goal": "Build and Maintain a Secure Network and Systems",
+      "evidence_sources": ["azure:resource_list"],
+      "pass_criteria": [
+        {"check": "firewall_exists", "params": {}},
+        {"check": "default_deny_rule", "params": {}}
+      ]
+    },
+    {
+      "id": "1.5",
+      "requirement": "Risks to the CDE from computing devices are mitigated",
+      "goal": "Build and Maintain a Secure Network and Systems",
+      "evidence_sources": ["entra-id:conditional_access", "azure:defender_recommendations"],
+      "pass_criteria": [
+        {"check": "conditional_access_device_compliance", "params": {}},
+        {"check": "endpoint_protection_enabled", "params": {}}
+      ]
+    },
+    {
+      "id": "2.1",
+      "requirement": "Processes and mechanisms for secure configurations are defined and understood",
+      "goal": "Build and Maintain a Secure Network and Systems",
+      "evidence_sources": ["github:docs_search"],
+      "pass_criteria": [
+        {"check": "doc_exists", "params": {"keywords": ["configuration standard", "hardening", "CIS benchmark"]}}
+      ]
+    },
+    {
+      "id": "2.2",
+      "requirement": "System components are configured and managed securely",
+      "goal": "Build and Maintain a Secure Network and Systems",
+      "evidence_sources": ["azure:defender_recommendations", "azure:sql_servers", "azure:storage_accounts"],
+      "pass_criteria": [
+        {"check": "tls_enforced", "params": {"min_version": "1.2"}},
+        {"check": "https_only", "params": {}},
+        {"check": "no_critical_defender_recommendations", "params": {}}
+      ]
+    },
+    {
+      "id": "3.1",
+      "requirement": "Processes for protecting stored account data are defined and understood",
+      "goal": "Protect Account Data",
+      "evidence_sources": ["github:docs_search", "purview:data_policies"],
+      "pass_criteria": [
+        {"check": "doc_exists", "params": {"keywords": ["data retention", "data disposal", "data lifecycle"]}}
+      ]
+    },
+    {
+      "id": "3.5",
+      "requirement": "PAN is secured wherever it is stored",
+      "goal": "Protect Account Data",
+      "evidence_sources": ["azure:storage_accounts", "azure:sql_servers", "azure:keyvault_list"],
+      "pass_criteria": [
+        {"check": "encryption_at_rest_enabled", "params": {}},
+        {"check": "tde_enabled", "params": {}},
+        {"check": "keyvault_exists", "params": {}}
+      ]
+    },
+    {
+      "id": "4.1",
+      "requirement": "Processes for protecting CHD during transmission are defined",
+      "goal": "Protect Account Data",
+      "evidence_sources": ["azure:storage_accounts", "azure:sql_servers"],
+      "pass_criteria": [
+        {"check": "https_only", "params": {}},
+        {"check": "tls_enforced", "params": {"min_version": "1.2"}}
+      ]
+    },
+    {
+      "id": "5.1",
+      "requirement": "Processes for protecting against malware are defined and understood",
+      "goal": "Maintain a Vulnerability Management Program",
+      "evidence_sources": ["azure:defender_recommendations", "entra-id:conditional_access"],
+      "pass_criteria": [
+        {"check": "endpoint_protection_enabled", "params": {}},
+        {"check": "doc_exists", "params": {"keywords": ["anti-malware", "endpoint protection", "malware policy"]}}
+      ]
+    },
+    {
+      "id": "6.2",
+      "requirement": "Bespoke and custom software is developed securely",
+      "goal": "Maintain a Vulnerability Management Program",
+      "evidence_sources": ["github:branch_protection", "github:pull_requests"],
+      "pass_criteria": [
+        {"check": "branch_protection_enabled", "params": {"branches": ["main", "master"]}},
+        {"check": "pr_review_required", "params": {"min_reviewers": 1}},
+        {"check": "status_checks_required", "params": {}}
+      ]
+    },
+    {
+      "id": "6.3",
+      "requirement": "Security vulnerabilities are identified and addressed",
+      "goal": "Maintain a Vulnerability Management Program",
+      "evidence_sources": ["azure:defender_recommendations", "github:docs_search"],
+      "pass_criteria": [
+        {"check": "vulnerability_scanning_enabled", "params": {}},
+        {"check": "dependency_scanning_enabled", "params": {}}
+      ]
+    },
+    {
+      "id": "6.4",
+      "requirement": "Public-facing web applications are protected",
+      "goal": "Maintain a Vulnerability Management Program",
+      "evidence_sources": ["azure:resource_list"],
+      "pass_criteria": [
+        {"check": "waf_exists", "params": {}},
+        {"check": "waf_prevention_mode", "params": {}}
+      ]
+    },
+    {
+      "id": "7.1",
+      "requirement": "Processes for restricting access are defined and understood",
+      "goal": "Implement Strong Access Control Measures",
+      "evidence_sources": ["entra-id:directory_roles", "github:docs_search"],
+      "pass_criteria": [
+        {"check": "doc_exists", "params": {"keywords": ["access control", "RBAC", "least privilege"]}},
+        {"check": "rbac_enabled", "params": {}}
+      ]
+    },
+    {
+      "id": "7.2",
+      "requirement": "Access to system components and data is appropriately defined and assigned",
+      "goal": "Implement Strong Access Control Measures",
+      "evidence_sources": ["entra-id:directory_roles", "entra-id:privileged_roles", "entra-id:group_memberships"],
+      "pass_criteria": [
+        {"check": "privileged_roles_limited", "params": {"max_global_admins": 5}},
+        {"check": "access_reviews_configured", "params": {}}
+      ]
+    },
+    {
+      "id": "8.3",
+      "requirement": "Strong authentication is established and managed",
+      "goal": "Implement Strong Access Control Measures",
+      "evidence_sources": ["entra-id:mfa_status", "entra-id:conditional_access"],
+      "pass_criteria": [
+        {"check": "mfa_enforced", "params": {"scope": "all_users"}},
+        {"check": "password_policy_compliant", "params": {"min_length": 12}}
+      ]
+    },
+    {
+      "id": "8.4",
+      "requirement": "Multi-factor authentication is implemented for all access into the CDE",
+      "goal": "Implement Strong Access Control Measures",
+      "evidence_sources": ["entra-id:mfa_status", "entra-id:conditional_access"],
+      "pass_criteria": [
+        {"check": "mfa_enforced_for_cde", "params": {}}
+      ]
+    },
+    {
+      "id": "8.6",
+      "requirement": "Use of application and system accounts is strictly managed",
+      "goal": "Implement Strong Access Control Measures",
+      "evidence_sources": ["entra-id:service_principals", "azure:keyvault_list"],
+      "pass_criteria": [
+        {"check": "service_accounts_inventoried", "params": {}},
+        {"check": "credential_rotation_configured", "params": {}},
+        {"check": "no_interactive_login_for_service_accounts", "params": {}}
+      ]
+    },
+    {
+      "id": "10.2",
+      "requirement": "Audit logs are implemented to support detection of anomalies",
+      "goal": "Regularly Monitor and Test Networks",
+      "evidence_sources": ["azure:activity_log", "azure:sql_servers", "azure:storage_accounts"],
+      "pass_criteria": [
+        {"check": "activity_log_enabled", "params": {}},
+        {"check": "sql_auditing_enabled", "params": {}},
+        {"check": "diagnostic_logging_enabled", "params": {}}
+      ]
+    },
+    {
+      "id": "10.3",
+      "requirement": "Audit logs are protected from destruction and unauthorized modifications",
+      "goal": "Regularly Monitor and Test Networks",
+      "evidence_sources": ["azure:storage_accounts"],
+      "pass_criteria": [
+        {"check": "immutable_storage_configured", "params": {}},
+        {"check": "log_access_restricted", "params": {}}
+      ]
+    },
+    {
+      "id": "10.5",
+      "requirement": "Audit log history is retained and available for analysis",
+      "goal": "Regularly Monitor and Test Networks",
+      "evidence_sources": ["azure:storage_accounts", "azure:activity_log"],
+      "pass_criteria": [
+        {"check": "log_retention_days", "params": {"min_days": 365}},
+        {"check": "recent_logs_available", "params": {"available_days": 90}}
+      ]
+    },
+    {
+      "id": "11.3",
+      "requirement": "External and internal vulnerabilities are regularly scanned",
+      "goal": "Regularly Monitor and Test Networks",
+      "evidence_sources": ["azure:defender_recommendations"],
+      "pass_criteria": [
+        {"check": "vulnerability_scanning_enabled", "params": {}},
+        {"check": "scan_frequency", "params": {"max_interval_days": 90}}
+      ]
+    },
+    {
+      "id": "12.1",
+      "requirement": "A comprehensive information security policy is established and maintained",
+      "goal": "Maintain an Information Security Policy",
+      "evidence_sources": ["github:docs_search"],
+      "pass_criteria": [
+        {"check": "doc_exists", "params": {"keywords": ["information security policy", "security policy"]}},
+        {"check": "doc_reviewed_recently", "params": {"max_age_days": 365}}
+      ]
+    },
+    {
+      "id": "12.10",
+      "requirement": "Security incidents are responded to immediately",
+      "goal": "Maintain an Information Security Policy",
+      "evidence_sources": ["github:docs_search", "azure:defender_recommendations"],
+      "pass_criteria": [
+        {"check": "doc_exists", "params": {"keywords": ["incident response", "IR plan"]}},
+        {"check": "ir_team_designated", "params": {}},
+        {"check": "ir_plan_tested", "params": {"max_age_days": 365}}
+      ]
+    }
+  ]
+}

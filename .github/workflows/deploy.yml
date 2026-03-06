@@ -1,0 +1,126 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "infra/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ACR_NAME: crcomplianceproduction
+  RESOURCE_GROUP: rg-compliance-production
+
+jobs:
+  build-backend:
+    name: Build & Push Backend Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: ACR Login
+        run: az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Build & Push
+        run: |
+          IMAGE_TAG="${{ github.sha }}"
+          docker build -t ${{ env.ACR_NAME }}.azurecr.io/compliance-backend:${IMAGE_TAG} \
+            -t ${{ env.ACR_NAME }}.azurecr.io/compliance-backend:latest \
+            -f backend/Dockerfile backend/
+          docker push ${{ env.ACR_NAME }}.azurecr.io/compliance-backend:${IMAGE_TAG}
+          docker push ${{ env.ACR_NAME }}.azurecr.io/compliance-backend:latest
+
+    outputs:
+      image_tag: ${{ github.sha }}
+
+  build-frontend:
+    name: Build & Push Frontend Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: ACR Login
+        run: az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Build & Push
+        run: |
+          IMAGE_TAG="${{ github.sha }}"
+          docker build -t ${{ env.ACR_NAME }}.azurecr.io/compliance-frontend:${IMAGE_TAG} \
+            -t ${{ env.ACR_NAME }}.azurecr.io/compliance-frontend:latest \
+            -f frontend/Dockerfile frontend/
+          docker push ${{ env.ACR_NAME }}.azurecr.io/compliance-frontend:${IMAGE_TAG}
+          docker push ${{ env.ACR_NAME }}.azurecr.io/compliance-frontend:latest
+
+    outputs:
+      image_tag: ${{ github.sha }}
+
+  deploy-infra:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]
+    environment: ${{ inputs.environment || 'staging' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7"
+
+      - name: Terraform Init
+        working-directory: infra
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: infra
+        run: |
+          terraform plan \
+            -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            -var="github_token=${{ secrets.GH_COPILOT_TOKEN }}" \
+            -var="container_image_tag=${{ github.sha }}" \
+            -var="environment=${{ inputs.environment || 'staging' }}" \
+            -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: infra
+        run: terraform apply -auto-approve tfplan

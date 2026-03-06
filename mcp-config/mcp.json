@@ -1,0 +1,103 @@
+{
+  "mcpServers": {
+    "azure": {
+      "type": "official",
+      "description": "Azure MCP Server — read-only access to Azure resources, policies, Defender for Cloud",
+      "command": "npx",
+      "args": ["-y", "@azure/mcp-server"],
+      "env": {
+        "AZURE_TENANT_ID": "${AZURE_TENANT_ID}",
+        "AZURE_CLIENT_ID": "${AZURE_CLIENT_ID}",
+        "AZURE_CLIENT_SECRET": "${AZURE_CLIENT_SECRET}",
+        "AZURE_SUBSCRIPTION_ID": "${AZURE_SUBSCRIPTION_ID}"
+      },
+      "tools": [
+        "azure_resource_list",
+        "azure_policy_list",
+        "azure_policy_assignments",
+        "azure_nsg_rules",
+        "azure_defender_recommendations",
+        "azure_keyvault_list",
+        "azure_storage_accounts",
+        "azure_sql_servers",
+        "azure_activity_log"
+      ]
+    },
+    "github": {
+      "type": "builtin",
+      "description": "GitHub MCP Server — repo settings, branch protections, PR management",
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "tools": [
+        "github_repo_get",
+        "github_branch_protection",
+        "github_pull_requests",
+        "github_create_pull_request",
+        "github_file_contents",
+        "github_search_code",
+        "github_commit_files",
+        "github_repo_list",
+        "github_create_branch"
+      ]
+    },
+    "entra-id": {
+      "type": "custom",
+      "description": "Custom Entra ID MCP Server — Microsoft Graph API for directory and identity queries",
+      "command": "python",
+      "args": ["-m", "backend.app.mcp.entra_id"],
+      "env": {
+        "AZURE_TENANT_ID": "${AZURE_TENANT_ID}",
+        "GRAPH_CLIENT_ID": "${GRAPH_CLIENT_ID}",
+        "GRAPH_CLIENT_SECRET": "${GRAPH_CLIENT_SECRET}"
+      },
+      "tools": [
+        "get_directory_roles",
+        "get_conditional_access_policies",
+        "get_group_memberships",
+        "get_mfa_status",
+        "get_service_principals",
+        "get_privileged_role_assignments",
+        "get_app_registrations"
+      ]
+    },
+    "purview": {
+      "type": "custom",
+      "description": "Custom Purview MCP Server — data classification, scan results, and data policies",
+      "command": "python",
+      "args": ["-m", "backend.app.mcp.purview"],
+      "env": {
+        "PURVIEW_ACCOUNT_NAME": "${PURVIEW_ACCOUNT_NAME}",
+        "PURVIEW_TENANT_ID": "${AZURE_TENANT_ID}",
+        "PURVIEW_CLIENT_ID": "${PURVIEW_CLIENT_ID}",
+        "PURVIEW_CLIENT_SECRET": "${PURVIEW_CLIENT_SECRET}"
+      },
+      "tools": [
+        "get_data_classifications",
+        "get_scan_results",
+        "get_data_policies",
+        "get_sensitivity_labels",
+        "get_glossary_terms"
+      ]
+    }
+  },
+  "tools": {
+    "shell": {
+      "description": "Restricted shell — only whitelisted commands",
+      "allowedCommands": [
+        "opa eval",
+        "opa test",
+        "opa check",
+        "terraform show",
+        "terraform plan"
+      ],
+      "sandboxPath": "/workspace"
+    }
+  },
+  "settings": {
+    "maxToolCallsPerSession": 100,
+    "sessionTimeoutMinutes": 60,
+    "contentFiltering": true,
+    "auditLogging": true
+  }
+}

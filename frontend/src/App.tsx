@@ -1,0 +1,21 @@
+import { Routes, Route } from "react-router-dom";
+import Layout from "./components/Layout";
+import Dashboard from "./pages/Dashboard";
+import EvidenceCollection from "./pages/EvidenceCollection";
+import PolicyEnforcer from "./pages/PolicyEnforcer";
+import Reports from "./pages/Reports";
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<Layout />}>
+        <Route index element={<Dashboard />} />
+        <Route path="evidence" element={<EvidenceCollection />} />
+        <Route path="policy" element={<PolicyEnforcer />} />
+        <Route path="reports" element={<Reports />} />
+      </Route>
+    </Routes>
+  );
+}
+
+export default App;
